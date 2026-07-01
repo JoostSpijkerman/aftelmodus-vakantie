@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Vakantie Aftelmode</title>
+
+<!-- PWA / iOS -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0b1420">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Vakantie">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b1420;
+    --card-bg: #111d2e;
+    --card-border: #1e2f45;
+    --text: #eef2f7;
+    --text-dim: #8493a8;
+    --accent: #fb923c;
+    --accent-2: #5eead4;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    padding: max(20px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+  }
+
+  .app-title {
+    font-size: 15px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin: 0 0 4px;
+    font-weight: 600;
+  }
+
+  .card {
+    width: 100%;
+    max-width: 420px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 20px;
+    padding: 22px 18px 26px;
+    text-align: center;
+  }
+
+  .card-label {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin: 0 0 16px;
+  }
+
+  .blocks {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+  }
+
+  .block {
+    flex: 1;
+    min-width: 0;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 14px;
+    padding: 10px 4px 8px;
+  }
+
+  .block-value {
+    font-variant-numeric: tabular-nums;
+    font-size: clamp(26px, 8vw, 38px);
+    font-weight: 700;
+    line-height: 1.1;
+    color: var(--text);
+  }
+
+  .card--vakantie .block-value { color: var(--accent); }
+  .card--werk .block-value { color: var(--accent-2); }
+
+  .block-unit {
+    margin-top: 4px;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  .done-text {
+    font-size: clamp(24px, 7vw, 32px);
+    font-weight: 700;
+    padding: 14px 0 4px;
+  }
+
+  .card--vakantie .done-text { color: var(--accent); }
+  .card--werk .done-text { color: var(--accent-2); }
+
+  .sub-note {
+    margin-top: 14px;
+    font-size: 12.5px;
+    color: var(--text-dim);
+  }
+
+  footer {
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--text-dim);
+    opacity: 0.6;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+  <p class="app-title">Vakantie aftelmode</p>
+
+  <section class="card card--vakantie">
+    <p class="card-label">Naar de vakantie</p>
+    <div id="vakantie-blocks" class="blocks">
+      <div class="block"><div class="block-value" id="v-days">--</div><div class="block-unit">dagen</div></div>
+      <div class="block"><div class="block-value" id="v-hours">--</div><div class="block-unit">uren</div></div>
+      <div class="block"><div class="block-value" id="v-mins">--</div><div class="block-unit">min</div></div>
+      <div class="block"><div class="block-value" id="v-secs">--</div><div class="block-unit">sec</div></div>
+    </div>
+    <div id="vakantie-done" class="done-text" style="display:none;">Je bent vrij! 🎉</div>
+    <p class="sub-note">Vrijdag 31 juli 2026, 10:00 uur</p>
+  </section>
+
+  <section class="card card--werk">
+    <p class="card-label">Nog te werken</p>
+    <div id="werk-blocks" class="blocks">
+      <div class="block"><div class="block-value" id="w-hours">--</div><div class="block-unit">uren</div></div>
+      <div class="block"><div class="block-value" id="w-mins">--</div><div class="block-unit">min</div></div>
+      <div class="block"><div class="block-value" id="w-secs">--</div><div class="block-unit">sec</div></div>
+    </div>
+    <div id="werk-done" class="done-text" style="display:none;">Klaar! ✅</div>
+    <p class="sub-note" id="werk-status">&nbsp;</p>
+  </section>
+
+  <footer>Bijgewerkt elke seconde &middot; Europe/Amsterdam</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  var TZ = "Europe/Amsterdam";
+
+  // ---------- timezone helpers (DST-safe, no external deps) ----------
+
+  // Offset (ms) such that: (wall-clock time in `timeZone` read as if it were UTC) - offset = real UTC instant.
+  function getTimeZoneOffsetMs(date, timeZone) {
+    var dtf = new Intl.DateTimeFormat("en-US", {
+      timeZone: timeZone,
+      hourCycle: "h23",
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit"
+    });
+    var parts = dtf.formatToParts(date).reduce(function (acc, p) {
+      acc[p.type] = p.value;
+      return acc;
+    }, {});
+    var asUTC = Date.UTC(
+      parseInt(parts.year, 10), parseInt(parts.month, 10) - 1, parseInt(parts.day, 10),
+      parseInt(parts.hour, 10), parseInt(parts.minute, 10), parseInt(parts.second, 10)
+    );
+    return asUTC - date.getTime();
+  }
+
+  // Convert a "wall clock" date/time as experienced in `timeZone` into the real UTC instant.
+  function zonedTimeToUtc(year, month, day, hour, minute, second, timeZone) {
+    var utcGuess = Date.UTC(year, month - 1, day, hour, minute, second);
+    var offset = getTimeZoneOffsetMs(new Date(utcGuess), timeZone);
+    var utc = utcGuess - offset;
+    // Re-check offset at the resolved instant in case of a DST boundary and correct once more.
+    offset = getTimeZoneOffsetMs(new Date(utc), timeZone);
+    utc = utcGuess - offset;
+    return new Date(utc);
+  }
+
+  // Current wall-clock date parts as seen in `timeZone`.
+  function getZonedParts(date, timeZone) {
+    var dtf = new Intl.DateTimeFormat("en-US", {
+      timeZone: timeZone,
+      hourCycle: "h23",
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit"
+    });
+    var parts = dtf.formatToParts(date).reduce(function (acc, p) {
+      acc[p.type] = p.value;
+      return acc;
+    }, {});
+    return {
+      year: parseInt(parts.year, 10),
+      month: parseInt(parts.month, 10),
+      day: parseInt(parts.day, 10),
+      hour: parseInt(parts.hour, 10),
+      minute: parseInt(parts.minute, 10),
+      second: parseInt(parts.second, 10)
+    };
+  }
+
+  // ---------- vacation target ----------
+
+  var VACATION_START = zonedTimeToUtc(2026, 7, 31, 10, 0, 0, TZ);
+
+  // ---------- work schedule ----------
+
+  // Full days off (in addition to weekends): [year, month, day]
+  var DAYS_OFF = [
+    [2026, 7, 8],
+    [2026, 7, 22]
+  ];
+
+  function isDayOff(y, m, d) {
+    return DAYS_OFF.some(function (o) { return o[0] === y && o[1] === m && o[2] === d; });
+  }
+
+  // Returns { startH, startM, endH, endM } or null if no work that day.
+  function getWorkBlock(y, m, d, weekday) {
+    if (weekday === 0 || weekday === 6) return null; // Sunday / Saturday
+    if (isDayOff(y, m, d)) return null;
+
+    if (weekday === 3) { // Wednesday
+      return { startH: 8, startM: 30, endH: 12, endM: 30 };
+    }
+
+    // Mon(1), Tue(2), Thu(4), Fri(5)
+    var block = { startH: 8, startM: 30, endH: 17, endM: 0 };
+
+    // Vacation day itself: work stops at 10:00
+    if (y === 2026 && m === 7 && d === 31) {
+      block.endH = 10;
+      block.endM = 0;
+    }
+
+    return block;
+  }
+
+  // Sum of remaining work seconds between `now` and the vacation start, walking day by day.
+  function computeRemainingWorkMs(now) {
+    var nowParts = getZonedParts(now, TZ);
+    var cursor = Date.UTC(nowParts.year, nowParts.month - 1, nowParts.day);
+    var end = Date.UTC(2026, 7 - 1, 31);
+
+    if (cursor > end) return 0;
+
+    var totalMs = 0;
+
+    while (cursor <= end) {
+      var cd = new Date(cursor);
+      var y = cd.getUTCFullYear();
+      var m = cd.getUTCMonth() + 1;
+      var d = cd.getUTCDate();
+      var weekday = cd.getUTCDay();
+
+      var block = getWorkBlock(y, m, d, weekday);
+      if (block) {
+        var blockStart = zonedTimeToUtc(y, m, d, block.startH, block.startM, 0, TZ);
+        var blockEnd = zonedTimeToUtc(y, m, d, block.endH, block.endM, 0, TZ);
+
+        if (now <= blockStart) {
+          totalMs += (blockEnd - blockStart);
+        } else if (now < blockEnd) {
+          totalMs += (blockEnd - now);
+        }
+        // else: block already passed today, contributes 0
+      }
+
+      cursor += 86400000; // next calendar day
+    }
+
+    return totalMs;
+  }
+
+  // ---------- formatting ----------
+
+  function pad2(n) { return n < 10 ? "0" + n : "" + n; }
+
+  function setText(id, value) {
+    var el = document.getElementById(id);
+    if (el.textContent !== value) el.textContent = value;
+  }
+
+  function setDisplay(id, show) {
+    document.getElementById(id).style.display = show ? "" : "none";
+  }
+
+  // ---------- teller 1: naar de vakantie ----------
+
+  function tickVakantie(now) {
+    var diff = VACATION_START.getTime() - now.getTime();
+
+    if (diff <= 0) {
+      setDisplay("vakantie-blocks", false);
+      setDisplay("vakantie-done", true);
+      return;
+    }
+
+    setDisplay("vakantie-blocks", true);
+    setDisplay("vakantie-done", false);
+
+    var totalSeconds = Math.floor(diff / 1000);
+    var days = Math.floor(totalSeconds / 86400);
+    var hours = Math.floor((totalSeconds % 86400) / 3600);
+    var mins = Math.floor((totalSeconds % 3600) / 60);
+    var secs = totalSeconds % 60;
+
+    setText("v-days", "" + days);
+    setText("v-hours", pad2(hours));
+    setText("v-mins", pad2(mins));
+    setText("v-secs", pad2(secs));
+  }
+
+  // ---------- teller 2: resterende werkuren ----------
+
+  function tickWerk(now) {
+    if (now.getTime() >= VACATION_START.getTime()) {
+      setDisplay("werk-blocks", false);
+      setDisplay("werk-done", true);
+      setText("werk-status", " ");
+      return;
+    }
+
+    var remainingMs = computeRemainingWorkMs(now);
+
+    setDisplay("werk-blocks", true);
+    setDisplay("werk-done", false);
+
+    var totalSeconds = Math.floor(remainingMs / 1000);
+    var hours = Math.floor(totalSeconds / 3600);
+    var mins = Math.floor((totalSeconds % 3600) / 60);
+    var secs = totalSeconds % 60;
+
+    setText("w-hours", "" + hours);
+    setText("w-mins", pad2(mins));
+    setText("w-secs", pad2(secs));
+
+    var nowParts = getZonedParts(now, TZ);
+    var weekday = new Date(Date.UTC(nowParts.year, nowParts.month - 1, nowParts.day)).getUTCDay();
+    var block = getWorkBlock(nowParts.year, nowParts.month, nowParts.day, weekday);
+    var inBlock = false;
+    if (block) {
+      var blockStart = zonedTimeToUtc(nowParts.year, nowParts.month, nowParts.day, block.startH, block.startM, 0, TZ);
+      var blockEnd = zonedTimeToUtc(nowParts.year, nowParts.month, nowParts.day, block.endH, block.endM, 0, TZ);
+      inBlock = now >= blockStart && now < blockEnd;
+    }
+    setText("werk-status", inBlock ? "Aan het werk" : "Buiten werktijd — teller pauzeert");
+  }
+
+  // ---------- main loop ----------
+
+  function tick() {
+    var now = new Date();
+    tickVakantie(now);
+    tickWerk(now);
+  }
+
+  tick();
+  setInterval(tick, 1000);
+
+  // ---------- service worker ----------
+
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("sw.js").catch(function () {});
+    });
+  }
+})();
+</script>
+</body>
+</html>
